@@ -1,3 +1,117 @@
+/**
+ * Species 5.5e
+ * Automatizaciones para especies de D&D 5e 2024 en Foundry VTT.
+ */
+
 Hooks.once("ready", () => {
   console.log("Species 5.5e | Módulo cargado correctamente.");
+});
+
+/**
+ * Blessing of the Raven Queen
+ */
+Hooks.on("dnd5e.postUseActivity", async (activity) => {
+  if (!activity) return;
+  if (activity.name !== "Blessing of the Raven Queen") return;
+
+  const actor = activity.actor;
+  if (!actor) return;
+
+  const token = actor.getActiveTokens()?.[0];
+
+  if (!token) {
+    ui.notifications.warn(
+      "Blessing of the Raven Queen | No tienes un token activo en la escena."
+    );
+    return;
+  }
+
+  if (!canvas?.ready || !canvas.grid) return;
+
+  const origin = token.center;
+  const gridSize = canvas.grid.size;
+  const distancePerGrid = canvas.grid.distance ?? 5;
+  const maxDistance = 30;
+
+  ui.notifications.info(
+    "Blessing of the Raven Queen | Haz clic en el destino. Clic derecho para cancelar."
+  );
+
+  const position = await new Promise((resolve) => {
+    const onPointerDown = (event) => {
+      const button = event.data.button;
+
+      cleanup();
+
+      if (button === 2) {
+        resolve(null);
+        return;
+      }
+
+      const point = event.data.global;
+
+      resolve({
+        x: point.x,
+        y: point.y
+      });
+    };
+
+    const cleanup = () => {
+      canvas.stage.off("pointerdown", onPointerDown);
+      canvas.app.view.style.cursor = "default";
+    };
+
+    canvas.stage.on("pointerdown", onPointerDown);
+    canvas.app.view.style.cursor = "crosshair";
+  });
+
+  if (!position) {
+    ui.notifications.info(
+      "Blessing of the Raven Queen | Teletransporte cancelado."
+    );
+    return;
+  }
+
+  const dx = position.x - origin.x;
+  const dy = position.y - origin.y;
+
+  const gridDistance = Math.sqrt(
+    (dx / gridSize) ** 2 +
+    (dy / gridSize) ** 2
+  );
+
+  const distance = gridDistance * distancePerGrid;
+
+  if (distance > maxDistance + 0.01) {
+    ui.notifications.warn(
+      `Blessing of the Raven Queen | El destino está demasiado lejos (${Math.round(distance)} pies).`
+    );
+    return;
+  }
+
+  const destination = canvas.grid.getSnappedPosition(
+    position.x,
+    position.y,
+    1
+  );
+
+  if (
+    !destination ||
+    !Number.isFinite(destination.x) ||
+    !Number.isFinite(destination.y)
+  ) {
+    ui.notifications.error(
+      "Blessing of the Raven Queen | No se pudo determinar el destino."
+    );
+    return;
+  }
+
+  await token.document.update({
+    x: destination.x,
+    y: destination.y
+  });
+
+  ui.notifications.info(
+    "Blessing of the Raven Queen | Teletransporte realizado."
+  );
 });
